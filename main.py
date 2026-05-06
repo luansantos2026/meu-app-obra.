@@ -4,105 +4,121 @@ from datetime import datetime
 from fpdf import FPDF
 
 # Configuração da página
-st.set_page_config(page_title="Gestor de Obra Pro", layout="wide")
+st.set_page_config(page_title="Orçamentista Pro", layout="wide")
 
 # --- INICIALIZAÇÃO DE DADOS ---
-if 'gastos' not in st.session_state:
-    st.session_state.gastos = pd.DataFrame(columns=["Descrição", "Categoria", "Valor", "Data"])
-
-if 'extras' not in st.session_state:
-    st.session_state.extras = pd.DataFrame(columns=["Descrição", "Valor", "Data", "Status"])
+if 'servicos' not in st.session_state:
+    st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)"])
 
 if 'materiais' not in st.session_state:
-    st.session_state.materiais = pd.DataFrame(columns=["Item", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)", "Status"])
+    st.session_state.materiais = pd.DataFrame(columns=["Item", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
 
-# --- DICIONÁRIO PARA DADOS DO CLIENTE ---
 if 'cliente' not in st.session_state:
-    st.session_state.cliente = {"nome": "", "obra": "", "data": "", "orcamento": 50000.0}
+    st.session_state.cliente = {"nome": "", "obra": "", "contato": ""}
 
-# Barra Lateral
-st.sidebar.header("📋 Dados do Cliente")
-st.session_state.cliente["nome"] = st.sidebar.text_input("Nome do Cliente", value=st.session_state.cliente["nome"])
-st.session_state.cliente["obra"] = st.sidebar.text_input("Endereço/Obra", value=st.session_state.cliente["obra"])
-st.session_state.cliente["orcamento"] = st.sidebar.number_input("Orçamento Contratado (R$)", min_value=0.0, value=st.session_state.cliente["orcamento"])
+# --- BARRA LATERAL: DADOS DO CLIENTE ---
+st.sidebar.header("👤 Dados do Cliente")
+st.session_state.cliente["nome"] = st.sidebar.text_input("Nome do Cliente", st.session_state.cliente["nome"])
+st.session_state.cliente["obra"] = st.sidebar.text_input("Endereço da Obra", st.session_state.cliente["obra"])
+st.session_state.cliente["contato"] = st.sidebar.text_input("Telefone/Contato", st.session_state.cliente["contato"])
 
-st.title(f"🏗️ Gestor de Obra: {st.session_state.cliente['nome']}")
-st.write(f"**Local:** {st.session_state.cliente['obra']}")
+st.title(f"📄 Orçamento: {st.session_state.cliente['nome']}")
 
-# --- NAVEGAÇÃO POR ABAS ---
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Financeiro", "➕ Serviços Extras", "📋 Lista de Materiais", "📑 Gerar Relatório PDF"])
+# --- NAVEGAÇÃO ---
+tab1, tab2, tab3 = st.tabs(["⚒️ Mão de Obra", "🧱 Materiais", "💾 Gerar Orçamento PDF"])
 
-# ABA 1: FINANCEIRO
+# ABA 1: MÃO DE OBRA (SERVIÇOS DO PEDREIRO)
 with tab1:
-    st.header("Controle de Custos")
-    total_gasto = st.session_state.gastos["Valor"].sum()
-    saldo = st.session_state.cliente["orcamento"] - total_gasto
-    
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Orçamento Base", f"R$ {st.session_state.cliente['orcamento']:,.2f}")
-    col_b.metric("Total Gasto", f"R$ {total_gasto:,.2f}")
-    col_c.metric("Saldo Atual", f"R$ {saldo:,.2f}", delta=f"{saldo:,.2f}")
-    
-    st.subheader("Registros de Gastos")
-    st.dataframe(st.session_state.gastos, use_container_width=True)
+    st.header("Valores de Mão de Obra")
+    with st.form("form_servico"):
+        col1, col2 = st.columns([3, 1])
+        desc_serv = col1.text_input("Descrição do Serviço (Ex: Reboco de 50m²)")
+        val_serv = col2.number_input("Valor (R$)", min_value=0.0)
+        if st.form_submit_button("Adicionar Serviço"):
+            if desc_serv:
+                novo_serv = pd.DataFrame([{"Descrição": desc_serv, "Valor (R$)": val_serv}])
+                st.session_state.servicos = pd.concat([st.session_state.servicos, novo_serv], ignore_index=True)
+                st.rerun()
 
-# ABA 2: EXTRAS
+    st.subheader("Resumo dos Serviços")
+    st.table(st.session_state.servicos)
+    total_mao_obra = st.session_state.servicos["Valor (R$)"].sum()
+    st.metric("Total Mão de Obra", f"R$ {total_mao_obra:,.2f}")
+
+# ABA 2: MATERIAIS (LISTA DETALHADA)
 with tab2:
-    st.header("Serviços Aditivos (Extras)")
-    with st.form("form_extra"):
-        d_ex = st.text_input("O que foi pedido extra?")
-        v_ex = st.number_input("Valor Extra (R$)", min_value=0.0)
-        if st.form_submit_button("Registrar Extra"):
-            novo_ex = pd.DataFrame([{"Descrição": d_ex, "Valor": v_ex, "Data": datetime.now().strftime("%d/%m/%Y"), "Status": "Pendente"}])
-            st.session_state.extras = pd.concat([st.session_state.extras, novo_ex], ignore_index=True)
-            st.rerun()
-    st.table(st.session_state.extras)
-
-# ABA 3: LISTA DE MATERIAIS
-with tab3:
-    st.header("Lista Detalhada de Materiais")
-    with st.expander("➕ Adicionar Material"):
-        with st.form("form_mat"):
-            c1, c2, c3, c4 = st.columns([3, 1, 1, 2])
-            it = c1.text_input("Material")
-            qt = c2.number_input("Qtd", min_value=0.0)
-            un = c3.selectbox("Un", ["m²", "Sacos", "Un", "Kg"])
-            pr = c4.number_input("Preço Unitário (R$)", min_value=0.0)
-            if st.form_submit_button("Salvar na Lista"):
+    st.header("Lista de Materiais Necessários")
+    with st.form("form_mat"):
+        c1, c2, c3, c4 = st.columns([3, 1, 1, 2])
+        it = c1.text_input("Nome do Material")
+        qt = c2.number_input("Quantidade", min_value=0.0)
+        un = c3.selectbox("Unid.", ["Sacos", "m²", "Unid", "Latas", "Metros"])
+        pr = c4.number_input("Preço Estimado Unit. (R$)", min_value=0.0)
+        
+        if st.form_submit_button("Adicionar Material"):
+            if it:
                 total_it = qt * pr
-                novo_mat = pd.DataFrame([{"Item": it, "Quantidade": qt, "Unidade": un, "Preço Unit. (R$)": pr, "Total (R$)": total_it, "Status": "Para Comprar"}])
+                novo_mat = pd.DataFrame([{"Item": it, "Quantidade": qt, "Unidade": un, "Preço Unit. (R$)": pr, "Total (R$)": total_it}])
                 st.session_state.materiais = pd.concat([st.session_state.materiais, novo_mat], ignore_index=True)
                 st.rerun()
-    st.dataframe(st.session_state.materiais, use_container_width=True)
 
-# ABA 4: GERADOR DE PDF
-with tab4:
-    st.header("Gerar Relatório Profissional")
-    st.write("Clique no botão abaixo para gerar o PDF com todos os dados preenchidos.")
+    st.subheader("Lista para Compra")
+    st.dataframe(st.session_state.materiais, use_container_width=True)
+    total_materiais = st.session_state.materiais["Total (R$)"].sum()
+    st.metric("Estimativa de Materiais", f"R$ {total_materiais:,.2f}")
+
+# ABA 3: PDF PROFISSIONAL
+with tab3:
+    st.header("Finalizar e Exportar")
+    total_geral = total_mao_obra + total_materiais
+    st.subheader(f"Valor Total do Orçamento: R$ {total_geral:,.2f}")
     
-    if st.button("Criar PDF"):
+    if st.button("Gerar Orçamento em PDF"):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", 'B', 16)
         
         # Cabeçalho
-        pdf.cell(200, 10, f"RELATORIO DE OBRA - {st.session_state.cliente['nome'].upper()}", ln=True, align='C')
+        pdf.cell(190, 10, "ORÇAMENTO DE CONSTRUÇÃO", ln=True, align='C')
+        pdf.ln(5)
         pdf.set_font("Arial", '', 12)
-        pdf.cell(200, 10, f"Obra: {st.session_state.cliente['obra']}", ln=True, align='C')
-        pdf.cell(200, 10, f"Data do Relatorio: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='C')
+        pdf.cell(190, 8, f"Cliente: {st.session_state.cliente['nome']}", ln=True)
+        pdf.cell(190, 8, f"Obra: {st.session_state.cliente['obra']}", ln=True)
+        pdf.cell(190, 8, f"Data: {datetime.now().strftime('%d/%m/%Y')}", ln=True)
         pdf.ln(10)
-        
-        # Resumo Financeiro no PDF
+
+        # MÃO DE OBRA
         pdf.set_font("Arial", 'B', 12)
-        pdf.cell(200, 10, "RESUMO FINANCEIRO:", ln=True)
-        pdf.set_font("Arial", '', 12)
-        pdf.cell(200, 10, f"Orcamento Base: R$ {st.session_state.cliente['orcamento']:,.2f}", ln=True)
-        pdf.cell(200, 10, f"Total Gasto: R$ {st.session_state.gastos['Valor'].sum():,.2f}", ln=True)
-        pdf.cell(200, 10, f"Total em Materiais: R$ {st.session_state.materiais['Total (R$)'].sum():,.2f}", ln=True)
+        pdf.cell(190, 10, "1. SERVIÇOS DE MÃO DE OBRA", ln=True)
+        pdf.set_font("Arial", '', 10)
+        for _, row in st.session_state.servicos.iterrows():
+            pdf.cell(150, 8, f"- {row['Descrição']}", border=0)
+            pdf.cell(40, 8, f"R$ {row['Valor (R$)']:,.2f}", border=0, ln=True, align='R')
+        pdf.ln(5)
+
+        # MATERIAIS
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(190, 10, "2. MATERIAIS (ESTIMATIVA)", ln=True)
+        pdf.set_font("Arial", '', 10)
+        # Cabeçalho da tabela de materiais
+        pdf.cell(80, 8, "Item", border=1)
+        pdf.cell(30, 8, "Qtd", border=1)
+        pdf.cell(40, 8, "V. Unit", border=1)
+        pdf.cell(40, 8, "Total", border=1, ln=True)
         
-        # Gerar o arquivo
-        nome_pdf = "relatorio_obra.pdf"
-        pdf.output(nome_pdf)
+        for _, row in st.session_state.materiais.iterrows():
+            pdf.cell(80, 8, str(row['Item']), border=1)
+            pdf.cell(30, 8, f"{row['Quantidade']} {row['Unidade']}", border=1)
+            pdf.cell(40, 8, f"R$ {row['Preço Unit. (R$)']:,.2f}", border=1)
+            pdf.cell(40, 8, f"R$ {row['Total (R$)']:,.2f}", border=1, ln=True)
+        pdf.ln(10)
+
+        # TOTAL GERAL
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(190, 10, f"VALOR TOTAL DO ORÇAMENTO: R$ {total_geral:,.2f}", ln=True, align='R')
         
-        with open(nome_pdf, "rb") as f:
-            st.download_button("📥 Baixar Relatório PDF", f, file_name=nome_pdf)
+        pdf_file = "orcamento_cliente.pdf"
+        pdf.output(pdf_file)
+        
+        with open(pdf_file, "rb") as f:
+            st.download_button("📥 Baixar Orçamento PDF", f, file_name=pdf_file)
