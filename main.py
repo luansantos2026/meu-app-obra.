@@ -10,7 +10,8 @@ st.set_page_config(page_title="Orçamentista Pro", layout="wide")
 if 'servicos' not in st.session_state:
     st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)"])
 if 'materiais' not in st.session_state:
-    st.session_state.materiais = pd.DataFrame(columns=["Item", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
+    # Adicionada a coluna 'Medidas'
+    st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
 if 'cliente' not in st.session_state:
     st.session_state.cliente = {"nome": "", "obra": "", "contato": ""}
 
@@ -20,11 +21,10 @@ st.session_state.cliente["nome"] = st.sidebar.text_input("Nome do Cliente", valu
 st.session_state.cliente["obra"] = st.sidebar.text_input("Endereço da Obra", value=st.session_state.cliente["obra"])
 st.session_state.cliente["contato"] = st.sidebar.text_input("Contato (Telefone)", value=st.session_state.cliente["contato"])
 
-# Botão de Reset Geral na lateral
 st.sidebar.markdown("---")
-if st.sidebar.button("Sweep 🧹 LIMPAR TUDO"):
+if st.sidebar.button("🧹 LIMPAR TUDO"):
     st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)"])
-    st.session_state.materiais = pd.DataFrame(columns=["Item", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
+    st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
     st.session_state.cliente = {"nome": "", "obra": "", "contato": ""}
     st.rerun()
 
@@ -44,7 +44,6 @@ with tab1:
                 novo = pd.DataFrame([{"Descrição": desc_serv, "Valor (R$)": val_serv}])
                 st.session_state.servicos = pd.concat([st.session_state.servicos, novo], ignore_index=True)
                 st.rerun()
-    
     st.table(st.session_state.servicos)
     if not st.session_state.servicos.empty:
         if st.button("🗑️ Limpar Mão de Obra"):
@@ -55,22 +54,33 @@ with tab1:
 with tab2:
     st.header("Lista de Materiais")
     with st.form("form_mat", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns([3, 1, 1, 2])
-        it = c1.text_input("Item")
-        qt = c2.number_input("Qtd", min_value=0.0)
-        un = c3.selectbox("Un", ["Sacos", "m²", "Un", "Latas", "Metros"])
-        pr = c4.number_input("Preço Unit. (R$)", min_value=0.0)
+        col_m1, col_m2 = st.columns([2, 1])
+        it = col_m1.text_input("Nome do Material (Ex: Vara de Ferro)")
+        med = col_m2.text_input("Medidas/Detalhes (Ex: 6x1 ou 90x90)")
+        
+        c1, c2, c3 = st.columns([1, 1, 2])
+        qt = c1.number_input("Qtd", min_value=0.0)
+        un = c2.selectbox("Un", ["Un", "Sacos", "m²", "Metros", "Latas", "Kg"])
+        pr = c3.number_input("Preço Unit. (R$)", min_value=0.0)
+        
         if st.form_submit_button("Incluir Material"):
             if it:
                 total_it = qt * pr
-                novo_m = pd.DataFrame([{"Item": it, "Quantidade": qt, "Unidade": un, "Preço Unit. (R$)": pr, "Total (R$)": total_it}])
+                novo_m = pd.DataFrame([{
+                    "Item": it, 
+                    "Medidas": med, 
+                    "Quantidade": qt, 
+                    "Unidade": un, 
+                    "Preço Unit. (R$)": pr, 
+                    "Total (R$)": total_it
+                }])
                 st.session_state.materiais = pd.concat([st.session_state.materiais, novo_m], ignore_index=True)
                 st.rerun()
 
     st.dataframe(st.session_state.materiais, use_container_width=True)
     if not st.session_state.materiais.empty:
         if st.button("🗑️ Limpar Lista de Materiais"):
-            st.session_state.materiais = pd.DataFrame(columns=["Item", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
+            st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
             st.rerun()
 
 # --- ABA 3: PDF ---
@@ -82,7 +92,7 @@ with tab3:
     
     st.subheader(f"Total Geral: R$ {total_geral:,.2f}")
     
-    if st.button("Gerar PDF"):
+    if st.button("Gerar PDF Completo"):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Helvetica", 'B', 16)
@@ -92,29 +102,30 @@ with tab3:
         pdf.ln(5)
         pdf.cell(190, 7, f"Cliente: {st.session_state.cliente['nome']}", ln=True)
         pdf.cell(190, 7, f"Contato: {st.session_state.cliente['contato']}", ln=True)
-        pdf.cell(190, 7, f"Endereço da Obra: {st.session_state.cliente['obra']}", ln=True)
+        pdf.cell(190, 7, f"Endereco da Obra: {st.session_state.cliente['obra']}", ln=True)
         pdf.cell(190, 7, f"Data: {datetime.now().strftime('%d/%m/%Y')}", ln=True)
         pdf.ln(10)
 
         # Mão de Obra
         pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(190, 10, "1. MAO DE OBRA (PEDREIRO)", ln=True, fill=False)
+        pdf.cell(190, 10, "1. MAO DE OBRA (PEDREIRO)", ln=True)
         pdf.set_font("Helvetica", '', 10)
         for _, r in st.session_state.servicos.iterrows():
             pdf.cell(150, 8, f"- {r['Descrição']}", border='B')
             pdf.cell(40, 8, f"R$ {r['Valor (R$)']:,.2f}", border='B', ln=True, align='R')
         
         pdf.ln(5)
-        # Materiais
+        # Materiais (Agora com Medidas no PDF)
         pdf.set_font("Helvetica", 'B', 12)
         pdf.cell(190, 10, "2. MATERIAIS (CLIENTE)", ln=True)
         pdf.set_font("Helvetica", '', 9)
         for _, r in st.session_state.materiais.iterrows():
-            pdf.cell(190, 7, f"- {r['Item']}: {r['Quantidade']} {r['Unidade']} (Total: R$ {r['Total (R$)']:,.2f})", ln=True)
+            txt_mat = f"- {r['Item']} ({r['Medidas']}): {r['Quantidade']} {r['Unidade']} - Total: R$ {r['Total (R$)']:,.2f}"
+            pdf.cell(190, 7, txt_mat, ln=True)
         
         pdf.ln(10)
         pdf.set_font("Helvetica", 'B', 14)
-        pdf.cell(190, 10, f"VALOR TOTAL DO ORCAMENTO: R$ {total_geral:,.2f}", ln=True, align='R')
+        pdf.cell(190, 10, f"VALOR TOTAL: R$ {total_geral:,.2f}", ln=True, align='R')
         
         # Assinaturas
         pdf.ln(25)
@@ -122,11 +133,9 @@ with tab3:
         pdf.line(20, y, 85, y)
         pdf.line(105, y, 170, y)
         pdf.ln(2)
-        pdf.set_font("Helvetica", '', 10)
         pdf.cell(85, 5, "Assinatura do Pedreiro", align='C')
         pdf.cell(105, 5, "Assinatura do Cliente", align='C')
         
-        pdf_file = "orcamento_completo.pdf"
-        pdf.output(pdf_file)
-        with open(pdf_file, "rb") as f:
-            st.download_button("📥 Baixar Orçamento PDF", f, file_name=pdf_file)
+        pdf.output("orcamento.pdf")
+        with open("orcamento.pdf", "rb") as f:
+            st.download_button("📥 Baixar PDF Atualizado", f, file_name="orcamento.pdf")
