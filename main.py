@@ -29,10 +29,12 @@ if 'servicos' not in st.session_state:
 if 'materiais' not in st.session_state:
     st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
 if 'cliente' not in st.session_state:
-    st.session_state.cliente = {"nome": "", "obra": "", "contato": ""}
+    st.session_state.cliente = {"nome": "", "obra": "", "contato": "", "responsavel": ""}
 
 # --- BARRA LATERAL ---
-st.sidebar.header("👤 Dados do Cliente")
+st.sidebar.header("👤 Informações")
+st.session_state.cliente["responsavel"] = st.sidebar.text_input("Seu Nome (Responsável)", value=st.session_state.cliente["responsavel"], placeholder="Ex: João Pedreiro")
+st.sidebar.markdown("---")
 st.session_state.cliente["nome"] = st.sidebar.text_input("Nome do Cliente", value=st.session_state.cliente["nome"])
 st.session_state.cliente["obra"] = st.sidebar.text_input("Endereço da Obra", value=st.session_state.cliente["obra"])
 st.session_state.cliente["contato"] = st.sidebar.text_input("Contato (Telefone)", value=st.session_state.cliente["contato"])
@@ -40,14 +42,14 @@ st.session_state.cliente["contato"] = st.sidebar.text_input("Contato (Telefone)"
 if st.sidebar.button("🧹 LIMPAR TUDO"):
     st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)", "Status"])
     st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
-    st.session_state.cliente = {"nome": "", "obra": "", "contato": ""}
+    st.session_state.cliente = {"nome": "", "obra": "", "contato": "", "responsavel": ""}
     st.rerun()
 
 st.title(f"📄 Orçamento: {st.session_state.cliente['nome']}")
 
 tab1, tab2, tab3 = st.tabs(["⚒️ Mão de Obra", "🧱 Materiais", "💾 Gerar Orçamento"])
 
-# --- ABA 1: MÃO DE OBRA (COM EDIÇÃO DE VALOR) ---
+# --- ABA 1: MÃO DE OBRA ---
 with tab1:
     st.header("Serviços do Pedreiro")
     with st.form("form_servico", clear_on_submit=True):
@@ -61,29 +63,19 @@ with tab1:
                 st.session_state.servicos = pd.concat([st.session_state.servicos, novo], ignore_index=True)
                 st.rerun()
     
-    st.subheader("Lista de Serviços e Ajustes")
     if not st.session_state.servicos.empty:
         for index, row in st.session_state.servicos.iterrows():
             with st.expander(f"⚙️ {row['Descrição']} - R$ {row['Valor (R$)']:,.2f}"):
                 c1, c2, c3 = st.columns([2, 1, 1])
-                
-                # Campo para editar o valor
-                novo_valor = c1.number_input(f"Editar Valor (R$)", value=float(row["Valor (R$)"]), key=f"edit_val_{index}")
-                
-                # Botão para salvar a edição
-                if c2.button("Salvar Valor", key=f"save_{index}"):
+                novo_valor = c1.number_input(f"Editar Valor", value=float(row["Valor (R$)"]), key=f"edit_val_{index}")
+                if c2.button("Salvar", key=f"save_{index}"):
                     st.session_state.servicos.at[index, "Valor (R$)"] = novo_valor
-                    st.success("Valor atualizado!")
                     st.rerun()
-                
-                # Botão para mudar status
                 status_label = "Concluir" if row["Status"] == "Pendente" else "Reabrir"
                 if c3.button(status_label, key=f"status_{index}"):
                     st.session_state.servicos.at[index, "Status"] = "Concluído" if row["Status"] == "Pendente" else "Pendente"
                     st.rerun()
-    
     total_mao = st.session_state.servicos["Valor (R$)"].sum()
-    st.info(f"Subtotal Mão de Obra: R$ {total_mao:,.2f}")
 
 # --- ABA 2: MATERIAIS ---
 with tab2:
@@ -105,7 +97,7 @@ with tab2:
     st.dataframe(st.session_state.materiais, use_container_width=True)
     total_mat = st.session_state.materiais["Total (R$)"].sum()
 
-# --- ABA 3: PDF SEPARADO ---
+# --- ABA 3: PDF PROFISSIONAL ---
 with tab3:
     st.header("Finalizar Orçamento")
     total_geral = total_mao + total_mat
@@ -114,7 +106,7 @@ with tab3:
     col_res1.metric("Mão de Obra", f"R$ {total_mao:,.2f}")
     col_res2.metric("Materiais", f"R$ {total_mat:,.2f}")
     
-    if st.button("Gerar PDF Final"):
+    if st.button("Gerar PDF Profissional"):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Helvetica", 'B', 16)
@@ -122,6 +114,7 @@ with tab3:
         pdf.ln(5)
         
         pdf.set_font("Helvetica", '', 11)
+        pdf.cell(190, 7, f"Responsável: {st.session_state.cliente['responsavel']}", ln=True)
         pdf.cell(190, 7, f"Cliente: {st.session_state.cliente['nome']}", ln=True)
         pdf.cell(190, 7, f"Contato: {st.session_state.cliente['contato']}", ln=True)
         pdf.cell(190, 7, f"Local: {st.session_state.cliente['obra']}", ln=True)
@@ -129,7 +122,7 @@ with tab3:
         pdf.ln(10)
 
         # MÃO DE OBRA
-        pdf.set_fill_color(230, 230, 230)
+        pdf.set_fill_color(235, 235, 235)
         pdf.set_font("Helvetica", 'B', 12)
         pdf.cell(190, 10, " 1. DETALHAMENTO DE MÃO DE OBRA", ln=True, fill=True)
         pdf.set_font("Helvetica", '', 10)
@@ -142,7 +135,7 @@ with tab3:
         pdf.ln(5)
 
         # MATERIAIS
-        pdf.set_fill_color(230, 230, 230)
+        pdf.set_fill_color(235, 235, 235)
         pdf.set_font("Helvetica", 'B', 12)
         pdf.cell(190, 10, " 2. DETALHAMENTO DE MATERIAIS", ln=True, fill=True)
         pdf.set_font("Helvetica", '', 9)
@@ -158,12 +151,18 @@ with tab3:
         pdf.set_font("Helvetica", 'B', 14)
         pdf.cell(190, 12, f"VALOR TOTAL DA OBRA: R$ {total_geral:,.2f}", border=1, ln=True, align='C')
 
-        pdf.ln(20)
+        # RODAPÉ E ASSINATURAS
+        pdf.ln(25)
         pdf.line(20, pdf.get_y(), 85, pdf.get_y())
         pdf.line(105, pdf.get_y(), 170, pdf.get_y())
-        pdf.cell(85, 5, "Assinatura Pedreiro", align='C')
-        pdf.cell(105, 5, "Assinatura Cliente", align='C')
+        pdf.set_font("Helvetica", 'B', 9)
+        pdf.cell(85, 5, f"{st.session_state.cliente['responsavel']}", align='C')
+        pdf.cell(105, 5, f"{st.session_state.cliente['nome']}", align='C')
+        pdf.ln(4)
+        pdf.set_font("Helvetica", '', 8)
+        pdf.cell(85, 5, "(Responsável Técnico)", align='C')
+        pdf.cell(105, 5, "(Cliente)", align='C')
         
         pdf.output("orcamento.pdf")
         with open("orcamento.pdf", "rb") as f:
-            st.download_button("📥 Baixar PDF", f, "orcamento.pdf")
+            st.download_button("📥 Baixar PDF com Assinatura", f, "orcamento.pdf")
