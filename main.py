@@ -8,7 +8,6 @@ st.set_page_config(page_title="Orçamentista Pro", layout="wide")
 
 # --- INICIALIZAÇÃO DE DADOS ---
 if 'servicos' not in st.session_state:
-    # Adicionada a coluna 'Status'
     st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)", "Status"])
 if 'materiais' not in st.session_state:
     st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
@@ -45,18 +44,14 @@ with tab1:
                 st.session_state.servicos = pd.concat([st.session_state.servicos, novo], ignore_index=True)
                 st.rerun()
     
-    # Exibição com opção de marcar como concluído
     if not st.session_state.servicos.empty:
         for index, row in st.session_state.servicos.iterrows():
             col_d, col_v, col_s, col_b = st.columns([3, 1, 1, 1])
             col_d.write(row["Descrição"])
             col_v.write(f"R$ {row['Valor (R$)']:,.2f}")
-            
-            # Cor para o status
             status_cor = "🔴" if row["Status"] == "Pendente" else "🟢"
             col_s.write(f"{status_cor} {row['Status']}")
-            
-            if col_b.button("Alterar Status", key=f"btn_{index}"):
+            if col_b.button("Status", key=f"btn_{index}"):
                 novo_status = "Concluído" if row["Status"] == "Pendente" else "Pendente"
                 st.session_state.servicos.at[index, "Status"] = novo_status
                 st.rerun()
@@ -65,7 +60,6 @@ with tab1:
         if st.button("🗑️ Limpar Mão de Obra"):
             st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)", "Status"])
             st.rerun()
-
     total_mao = st.session_state.servicos["Valor (R$)"].sum()
 
 # --- ABA 2: MATERIAIS ---
@@ -73,12 +67,13 @@ with tab2:
     st.header("Lista de Materiais")
     with st.form("form_mat", clear_on_submit=True):
         col_m1, col_m2 = st.columns([2, 1])
-        it = col_m1.text_input("Nome do Material")
-        med = col_m2.text_input("Medidas/Detalhes")
+        it = col_m1.text_input("Material (Ex: Fio Flexível, Mangueira)")
+        med = col_m2.text_input("Medida (Ex: 2,5mm, 1/2 pol)")
         
         c1, c2, c3 = st.columns([1, 1, 2])
         qt = c1.number_input("Qtd", min_value=0.0)
-        un = c2.selectbox("Un", ["Un", "Sacos", "m²", "Metros", "Latas", "Kg"])
+        # ADICIONADO "Rolos" e "Pecas" na lista abaixo
+        un = c2.selectbox("Unid.", ["Rolos", "Un", "Metros", "Sacos", "m²", "Pecas", "Latas", "Kg", "Pares"])
         pr = c3.number_input("Preço Unit. (R$)", min_value=0.0)
         
         if st.form_submit_button("Incluir Material"):
@@ -99,7 +94,6 @@ with tab3:
     st.header("Finalizar Orçamento")
     total_mat = st.session_state.materiais["Total (R$)"].sum()
     total_geral = total_mao + total_mat
-    
     st.subheader(f"Total Geral: R$ {total_geral:,.2f}")
     
     if st.button("Gerar PDF Completo"):
