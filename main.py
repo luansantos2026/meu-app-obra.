@@ -8,9 +8,9 @@ st.set_page_config(page_title="Orçamentista Pro", layout="wide")
 
 # --- INICIALIZAÇÃO DE DADOS ---
 if 'servicos' not in st.session_state:
-    st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)"])
+    # Adicionada a coluna 'Status'
+    st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)", "Status"])
 if 'materiais' not in st.session_state:
-    # Adicionada a coluna 'Medidas'
     st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
 if 'cliente' not in st.session_state:
     st.session_state.cliente = {"nome": "", "obra": "", "contato": ""}
@@ -23,7 +23,7 @@ st.session_state.cliente["contato"] = st.sidebar.text_input("Contato (Telefone)"
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🧹 LIMPAR TUDO"):
-    st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)"])
+    st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)", "Status"])
     st.session_state.materiais = pd.DataFrame(columns=["Item", "Medidas", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)"])
     st.session_state.cliente = {"nome": "", "obra": "", "contato": ""}
     st.rerun()
@@ -41,22 +41,40 @@ with tab1:
         val_serv = col2.number_input("Valor (R$)", min_value=0.0)
         if st.form_submit_button("Adicionar"):
             if desc_serv:
-                novo = pd.DataFrame([{"Descrição": desc_serv, "Valor (R$)": val_serv}])
+                novo = pd.DataFrame([{"Descrição": desc_serv, "Valor (R$)": val_serv, "Status": "Pendente"}])
                 st.session_state.servicos = pd.concat([st.session_state.servicos, novo], ignore_index=True)
                 st.rerun()
-    st.table(st.session_state.servicos)
+    
+    # Exibição com opção de marcar como concluído
     if not st.session_state.servicos.empty:
+        for index, row in st.session_state.servicos.iterrows():
+            col_d, col_v, col_s, col_b = st.columns([3, 1, 1, 1])
+            col_d.write(row["Descrição"])
+            col_v.write(f"R$ {row['Valor (R$)']:,.2f}")
+            
+            # Cor para o status
+            status_cor = "🔴" if row["Status"] == "Pendente" else "🟢"
+            col_s.write(f"{status_cor} {row['Status']}")
+            
+            if col_b.button("Alterar Status", key=f"btn_{index}"):
+                novo_status = "Concluído" if row["Status"] == "Pendente" else "Pendente"
+                st.session_state.servicos.at[index, "Status"] = novo_status
+                st.rerun()
+        
+        st.markdown("---")
         if st.button("🗑️ Limpar Mão de Obra"):
-            st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)"])
+            st.session_state.servicos = pd.DataFrame(columns=["Descrição", "Valor (R$)", "Status"])
             st.rerun()
+
+    total_mao = st.session_state.servicos["Valor (R$)"].sum()
 
 # --- ABA 2: MATERIAIS ---
 with tab2:
     st.header("Lista de Materiais")
     with st.form("form_mat", clear_on_submit=True):
         col_m1, col_m2 = st.columns([2, 1])
-        it = col_m1.text_input("Nome do Material (Ex: Vara de Ferro)")
-        med = col_m2.text_input("Medidas/Detalhes (Ex: 6x1 ou 90x90)")
+        it = col_m1.text_input("Nome do Material")
+        med = col_m2.text_input("Medidas/Detalhes")
         
         c1, c2, c3 = st.columns([1, 1, 2])
         qt = c1.number_input("Qtd", min_value=0.0)
@@ -66,14 +84,7 @@ with tab2:
         if st.form_submit_button("Incluir Material"):
             if it:
                 total_it = qt * pr
-                novo_m = pd.DataFrame([{
-                    "Item": it, 
-                    "Medidas": med, 
-                    "Quantidade": qt, 
-                    "Unidade": un, 
-                    "Preço Unit. (R$)": pr, 
-                    "Total (R$)": total_it
-                }])
+                novo_m = pd.DataFrame([{"Item": it, "Medidas": med, "Quantidade": qt, "Unidade": un, "Preço Unit. (R$)": pr, "Total (R$)": total_it}])
                 st.session_state.materiais = pd.concat([st.session_state.materiais, novo_m], ignore_index=True)
                 st.rerun()
 
@@ -86,7 +97,6 @@ with tab2:
 # --- ABA 3: PDF ---
 with tab3:
     st.header("Finalizar Orçamento")
-    total_mao = st.session_state.servicos["Valor (R$)"].sum()
     total_mat = st.session_state.materiais["Total (R$)"].sum()
     total_geral = total_mao + total_mat
     
@@ -111,11 +121,12 @@ with tab3:
         pdf.cell(190, 10, "1. MAO DE OBRA (PEDREIRO)", ln=True)
         pdf.set_font("Helvetica", '', 10)
         for _, r in st.session_state.servicos.iterrows():
-            pdf.cell(150, 8, f"- {r['Descrição']}", border='B')
+            status_txt = "[OK]" if r["Status"] == "Concluído" else "[ ]"
+            pdf.cell(150, 8, f"{status_txt} {r['Descrição']}", border='B')
             pdf.cell(40, 8, f"R$ {r['Valor (R$)']:,.2f}", border='B', ln=True, align='R')
         
         pdf.ln(5)
-        # Materiais (Agora com Medidas no PDF)
+        # Materiais
         pdf.set_font("Helvetica", 'B', 12)
         pdf.cell(190, 10, "2. MATERIAIS (CLIENTE)", ln=True)
         pdf.set_font("Helvetica", '', 9)
