@@ -1,86 +1,87 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from fpdf import FPDF
-import io
 
-# --- CONFIGURAÇÃO E ESTILO ---
+# Configuração da página
 st.set_page_config(page_title="Gestor de Obra Pro", layout="wide")
-st.markdown("""<style> .main { background-color: #f5f7f9; } </style>""", unsafe_allow_html=True)
+
+st.title("🏗️ Gestor de Orçamentos e Obras")
 
 # --- INICIALIZAÇÃO DE DADOS ---
 if 'gastos' not in st.session_state:
-    st.session_state.gastos = []
+    st.session_state.gastos = pd.DataFrame(columns=["Descrição", "Categoria", "Valor", "Data"])
+
 if 'extras' not in st.session_state:
-    st.session_state.extras = []
+    st.session_state.extras = pd.DataFrame(columns=["Descrição", "Valor", "Data", "Status"])
 
-# --- FUNÇÃO PARA GERAR PDF ---
-def gerar_relatorio_pdf(orcamento, gastos, extras):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, "Relatório Financeiro de Obra", ln=True, align='C')
-    
-    pdf.set_font("Arial", '', 12)
-    pdf.ln(10)
-    pdf.cell(200, 10, f"Data do Relatório: {datetime.now().strftime('%d/%m/%Y')}", ln=True)
-    pdf.cell(200, 10, f"Orçamento Base: R$ {orcamento:,.2f}", ln=True)
-    
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, "Detalhamento de Gastos", ln=True)
-    pdf.set_font("Arial", '', 10)
-    for g in gastos:
-        pdf.cell(200, 8, f"- {g['Descrição']} ({g['Categoria']}): R$ {g['Valor']:,.2f}", ln=True)
-    
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 12)
-    total_g = sum(item['Valor'] for item in gastos)
-    pdf.cell(200, 10, f"Total Gasto: R$ {total_g:,.2f}", ln=True)
-    
-    output = io.BytesIO()
-    pdf_output = pdf.output(dest='S').encode('latin-1')
-    output.write(pdf_output)
-    return output.getvalue()
+if 'materiais' not in st.session_state:
+    # Tabela de materiais com colunas de custo
+    st.session_state.materiais = pd.DataFrame(columns=["Item", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)", "Status"])
 
-# --- INTERFACE ---
-st.title("🏗️ Gestor de Obra Pro")
-st.sidebar.header("Configurações do Projeto")
-orcamento_base = st.sidebar.number_input("Orçamento Base (R$)", value=50000.0)
+# Barra Lateral
+st.sidebar.header("⚙️ Configurações")
+orcamento_base = st.sidebar.number_input("Orçamento Base (R$)", min_value=0.0, value=50000.0)
 
-tab1, tab2, tab3 = st.tabs(["📊 Financeiro Principal", "➕ Aditivos/Extras", "📄 Relatórios & PDF"])
+# --- NAVEGAÇÃO POR ABAS ---
+tab1, tab2, tab3 = st.tabs(["📊 Financeiro", "➕ Serviços Extras", "📋 Lista de Materiais"])
 
+# ABA 1: FINANCEIRO
 with tab1:
-    st.header("Controle de Custos")
-    with st.form("form_gastos"):
-        col1, col2 = st.columns(2)
-        desc = col1.text_input("Descrição do Item")
-        cat = col2.selectbox("Categoria", ["Materiais", "Mão de Obra", "Outros"])
-        val = st.number_input("Valor (R$)", min_value=0.0)
-        recibo = st.file_uploader("Anexar Foto do Recibo", type=["jpg", "png", "pdf"])
-        if st.form_submit_button("Registrar Gasto"):
-            st.session_state.gastos.append({"Descrição": desc, "Categoria": cat, "Valor": val, "Data": datetime.now()})
-            st.success("Gasto e Recibo registrados!")
+    st.header("Controle de Custos da Obra")
+    total_gasto = st.session_state.gastos["Valor"].sum()
+    st.metric("Total Gasto", f"R$ {total_gasto:,.2f}", delta=f"Saldo: R$ {orcamento_base - total_gasto:,.2f}")
+    st.dataframe(st.session_state.gastos, use_container_width=True)
 
-    df_gastos = pd.DataFrame(st.session_state.gastos)
-    if not df_gastos.empty:
-        st.dataframe(df_gastos, use_container_width=True)
-
+# ABA 2: EXTRAS
 with tab2:
-    st.header("Serviços Extras (Fora do Orçamento)")
-    with st.form("form_extras"):
-        desc_e = st.text_input("Descrição do Serviço Extra")
-        val_e = st.number_input("Valor Adicional (R$)", min_value=0.0)
-        status = st.selectbox("Status", ["Aguardando Aprovação", "Aprovado", "Pago"])
-        if st.form_submit_button("Adicionar Extra"):
-            st.session_state.extras.append({"Descrição": desc_e, "Valor": val_e, "Status": status})
-    
-    df_extras = pd.DataFrame(st.session_state.extras)
-    if not df_extras.empty:
-        st.table(df_extras)
+    st.header("Serviços Fora do Orçamento")
+    with st.form("form_extra"):
+        desc_ex = st.text_input("Descrição do Extra")
+        val_ex = st.number_input("Valor Cobrado (R$)", min_value=0.0)
+        if st.form_submit_button("Adicionar"):
+            novo_ex = pd.DataFrame([{"Descrição": desc_ex, "Valor": val_ex, "Data": datetime.now().strftime("%d/%m/%Y"), "Status": "Pendente"}])
+            st.session_state.extras = pd.concat([st.session_state.extras, novo_ex], ignore_index=True)
+            st.rerun()
+    st.table(st.session_state.extras)
 
+# ABA 3: LISTA DE MATERIAIS (COM CÁLCULO DE PREÇO)
 with tab3:
-    st.header("Exportação de Relatórios")
-    if st.button("Gerar Relatório em PDF"):
-        pdf_data = gerar_relatorio_pdf(orcamento_base, st.session_state.gastos, st.session_state.extras)
-        st.download_button(label="📥 Baixar PDF para o Cliente", data=pdf_data, file_name="relatorio_obra.pdf", mime="application/pdf")
+    st.header("Lista Detalhada de Materiais e Custos")
+    
+    with st.expander("➕ Adicionar Novo Material"):
+        with st.form("form_material"):
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 2])
+            item = col1.text_input("Material (Ex: Porcelanato)")
+            qtd = col2.number_input("Qtd", min_value=0.0, step=1.0)
+            unid = col3.selectbox("Unid.", ["m²", "Sacos", "Unid", "Kg", "Latas"])
+            preco_un = col4.number_input("Preço Unitário (R$)", min_value=0.0)
+            
+            status_mat = st.selectbox("Status", ["Para Comprar", "Comprado", "Entregue"])
+            
+            if st.form_submit_button("Incluir na Lista"):
+                if item:
+                    # Cálculo automático do total do item
+                    total_item = qtd * preco_un
+                    novo_mat = pd.DataFrame([{
+                        "Item": item, 
+                        "Quantidade": qtd, 
+                        "Unidade": unid, 
+                        "Preço Unit. (R$)": preco_un,
+                        "Total (R$)": total_item,
+                        "Status": status_mat
+                    }])
+                    st.session_state.materiais = pd.concat([st.session_state.materiais, novo_mat], ignore_index=True)
+                    st.success(f"Registrado: {item}")
+                    st.rerun()
+
+    if not st.session_state.materiais.empty:
+        # Resumo da lista de materiais
+        soma_materiais = st.session_state.materiais["Total (R$)"].sum()
+        st.info(f"💰 **Soma Total dos Materiais Listados: R$ {soma_materiais:,.2f}**")
+        
+        st.subheader("Itens na Lista")
+        st.dataframe(st.session_state.materiais, use_container_width=True)
+        
+        if st.button("Limpar Lista"):
+            st.session_state.materiais = pd.DataFrame(columns=["Item", "Quantidade", "Unidade", "Preço Unit. (R$)", "Total (R$)", "Status"])
+            st.rerun()
